@@ -1,0 +1,24 @@
+GM220-S REBOOTER PRO v2.0 - UPDATE GUIDE
+
+EASIEST METHOD
+1. Extract this ZIP.
+2. In GitHub, open your GM220S-Router-Rebooter repository.
+3. Replace/upload the contents of GM220S_Android_App with the folder from this ZIP.
+4. Also replace .github/workflows/build-apk.yml with the one from this ZIP.
+5. Commit changes.
+6. Actions -> Build Android APK -> Run workflow.
+7. Download the GM220S-Rebooter-PRO artifact.
+8. Extract it and install app-debug.apk.
+
+Because the package name is unchanged, Android may let you install this over the old app.
+If Android refuses because of a signature mismatch, uninstall the old APK first, then install the new one.
+
+After installation:
+- Open app
+- Confirm router address/username/password
+- Test Connection
+- Restart Router Now once
+- Enable Daily Restart
+- Allow Exact Alarm permission
+- Allow Notifications
+- In Android app settings, choose unrestricted/background battery use if your phone offers it.
