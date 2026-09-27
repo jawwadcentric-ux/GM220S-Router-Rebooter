@@ -1,0 +1,58 @@
+GM220-S ANDROID APP - GITHUB BEGINNER BUILD
+=============================================
+
+You do NOT need Android Studio.
+
+WHAT YOU NEED
+-------------
+1. A free GitHub account
+2. This project ZIP
+3. A browser
+
+STEPS
+-----
+1. Open github.com and sign in.
+2. Click the + button at the top-right -> New repository.
+3. Repository name:
+   GM220S-Router-Rebooter
+4. Keep it Public or Private. Either is fine.
+5. Click Create repository.
+
+UPLOAD THE PROJECT
+------------------
+6. Extract this ZIP on your PC.
+7. Open your new GitHub repository.
+8. Click "uploading an existing file".
+9. Drag ALL files/folders from inside the extracted folder into GitHub.
+   IMPORTANT: upload the CONTENTS of the folder, not the outer ZIP itself.
+10. Scroll down and click "Commit changes".
+
+BUILD THE APK
+-------------
+11. Open the "Actions" tab in your GitHub repository.
+12. If GitHub asks to enable Actions, enable them.
+13. Click "Build Android APK" in the left side.
+14. Click "Run workflow" -> "Run workflow".
+15. Wait a few minutes until the build shows a green check mark.
+16. Open that completed workflow run.
+17. Scroll to the "Artifacts" section.
+18. Download "GM220S-Rebooter-APK".
+19. Extract the downloaded artifact ZIP.
+20. Inside it you will find:
+    app-debug.apk
+
+INSTALL ON ANDROID
+------------------
+21. Send app-debug.apk to your Android phone.
+22. Open it on the phone.
+23. Android may ask "Allow installation from this source".
+24. Allow it, then install the APK.
+
+IF BUILD FAILS
+--------------
+Open the failed Action, click the red build step, and copy the error text to ChatGPT.
+
+SECURITY NOTE
+-------------
+Do not put your router username/password into GitHub source files.
+Enter those only inside the app after installing it.
