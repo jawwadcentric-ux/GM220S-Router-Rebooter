@@ -24,8 +24,13 @@ public class RouterClient {
     private static String read(HttpURLConnection c) throws Exception {
         InputStream in;
         try { in = c.getInputStream(); }
-        catch (IOException e) { in = c.getErrorStream(); if (in == null) throw e; }
+        catch (IOException e) {
+            in = c.getErrorStream();
+            if (in == null) throw e;
+        }
+
         if (in == null) return "";
+
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[4096];
         int n;
@@ -60,8 +65,10 @@ public class RouterClient {
         c.setConnectTimeout(12000);
         c.setReadTimeout(12000);
         c.setInstanceFollowRedirects(redirects);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Safari/537.36");
-        c.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        c.setRequestProperty("User-Agent",
+                "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120 Safari/537.36");
+        c.setRequestProperty("Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         c.setRequestProperty("Accept-Language", "en-US,en;q=0.8");
         c.setRequestProperty("Connection", "keep-alive");
         if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
@@ -70,22 +77,29 @@ public class RouterClient {
 
     private static String mergeCookies(HttpURLConnection c, String old) {
         LinkedHashMap<String,String> jar = new LinkedHashMap<>();
+
         if (old != null && !old.isEmpty()) {
             for (String piece : old.split(";\\s*")) {
                 int eq = piece.indexOf('=');
-                if (eq > 0) jar.put(piece.substring(0,eq).trim(), piece.substring(eq+1).trim());
+                if (eq > 0) {
+                    jar.put(piece.substring(0,eq).trim(), piece.substring(eq+1).trim());
+                }
             }
         }
+
         Map<String,List<String>> h = c.getHeaderFields();
         for (Map.Entry<String,List<String>> e : h.entrySet()) {
             if (e.getKey() != null && e.getKey().equalsIgnoreCase("Set-Cookie")) {
                 for (String s : e.getValue()) {
                     String pair = s.split(";", 2)[0];
                     int eq = pair.indexOf('=');
-                    if (eq > 0) jar.put(pair.substring(0,eq).trim(), pair.substring(eq+1).trim());
+                    if (eq > 0) {
+                        jar.put(pair.substring(0,eq).trim(), pair.substring(eq+1).trim());
+                    }
                 }
             }
         }
+
         StringBuilder b = new StringBuilder();
         for (Map.Entry<String,String> e : jar.entrySet()) {
             if (b.length() > 0) b.append("; ");
@@ -94,16 +108,30 @@ public class RouterClient {
         return b.toString();
     }
 
-    private static Response request(String url, String method, String body, String cookie, String base, boolean followRedirects) throws Exception {
+    private static Response request(
+            String url,
+            String method,
+            String body,
+            String cookie,
+            String origin,
+            String referer,
+            boolean followRedirects
+    ) throws Exception {
+
         HttpURLConnection c = open(url, method, cookie, followRedirects);
+
         if ("POST".equals(method)) {
             c.setDoOutput(true);
             c.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            c.setRequestProperty("Origin", base);
-            c.setRequestProperty("Referer", base + "/");
+            if (origin != null) c.setRequestProperty("Origin", origin);
+            if (referer != null) c.setRequestProperty("Referer", referer);
+
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             c.setFixedLengthStreamingMode(bytes.length);
-            try (OutputStream os = c.getOutputStream()) { os.write(bytes); }
+
+            try (OutputStream os = c.getOutputStream()) {
+                os.write(bytes);
+            }
         }
 
         Response r = new Response();
@@ -116,47 +144,85 @@ public class RouterClient {
     }
 
     private static String sessionToken(String html) {
-        return find(html,
-                "var\\s+session_token\\s*=\\s*[\\\"']([^\\\"']+)",
-                "session_token\\s*=\\s*[\\\"']([^\\\"']+)",
-                "name=[\\\"']?_SESSION_TOKEN[\\\"']?[^>]*value=[\\\"']([^\\\"']+)",
-                "_SESSION_TOKEN[^0-9A-Za-z_-]{0,100}([0-9A-Za-z_-]+)");
+        if (html == null) return null;
+
+        String token = find(html,
+                // hidden/input forms
+                "name\\s*=\\s*[\"']?_SESSION_TOKEN[\"']?[^>]*value\\s*=\\s*[\"']?([0-9A-Za-z_-]+)",
+                "id\\s*=\\s*[\"']?_SESSION_TOKEN[\"']?[^>]*value\\s*=\\s*[\"']?([0-9A-Za-z_-]+)",
+                "value\\s*=\\s*[\"']?([0-9A-Za-z_-]+)[\"']?[^>]*(?:name|id)\\s*=\\s*[\"']?_SESSION_TOKEN[\"']?",
+
+                // JS variable forms
+                "(?:var\\s+)?session_token\\s*=\\s*[\"']?([0-9A-Za-z_-]+)",
+                "(?:var\\s+)?_SESSION_TOKEN\\s*=\\s*[\"']?([0-9A-Za-z_-]+)",
+                "session_token\\s*:\\s*[\"']?([0-9A-Za-z_-]+)",
+                "_SESSION_TOKEN\\s*:\\s*[\"']?([0-9A-Za-z_-]+)",
+
+                // generic near-token fallbacks
+                "_SESSION_TOKEN[^0-9A-Za-z_-]{0,120}([0-9]{8,})",
+                "session_token[^0-9A-Za-z_-]{0,120}([0-9]{8,})"
+        );
+
+        if (token != null && token.length() >= 8) return token;
+        return null;
     }
 
     private static boolean looksLoggedIn(String html, String location) {
         String x = html == null ? "" : html.toLowerCase(Locale.US);
         String l = location == null ? "" : location.toLowerCase(Locale.US);
+
         return x.contains("logout")
-                || x.contains("start.ghtml")
                 || x.contains("device information")
+                || x.contains("start.ghtml")
                 || l.contains("start.ghtml")
                 || l.contains("getpage.gch");
     }
 
-    private static Result attempt(String base, String user, String pass, boolean doReboot, int passwordMode) {
+    private static class LoginSession {
+        boolean ok;
+        String message;
+        String base;
+        String cookie;
+    }
+
+    private static LoginSession login(String base, String user, String pass, int passwordMode) {
+        LoginSession out = new LoginSession();
+
         try {
-            if (!base.startsWith("http://") && !base.startsWith("https://")) base = "http://" + base;
-            while (base.endsWith("/")) base = base.substring(0, base.length()-1);
+            if (!base.startsWith("http://") && !base.startsWith("https://")) {
+                base = "http://" + base;
+            }
+            while (base.endsWith("/")) {
+                base = base.substring(0, base.length() - 1);
+            }
+
+            out.base = base;
 
             String cookie = "_TESTCOOKIESUPPORT=1";
 
-            // Exact form observed on this GM220-S V9.0.10P1T1:
-            // frashnum=
-            // action=login
-            // Frm_Logintoken=0 (or current token)
-            // username=<user>
-            // Password=<password>
-            Response loginPage = request(base + "/", "GET", null, cookie, base, true);
+            Response loginPage = request(
+                    base + "/",
+                    "GET",
+                    null,
+                    cookie,
+                    null,
+                    null,
+                    true
+            );
             cookie = loginPage.cookie;
 
             String token = find(loginPage.body,
-                    "name=[\\\"']?Frm_Logintoken[\\\"']?[^>]*value=[\\\"']([^\\\"']*)",
-                    "Frm_Logintoken[^0-9]{0,100}([0-9]+)");
+                    "name\\s*=\\s*[\"']?Frm_Logintoken[\"']?[^>]*value\\s*=\\s*[\"']([^\"']*)",
+                    "name\\s*=\\s*[\"']?Frm_Logintoken[\"']?[^>]*value\\s*=\\s*([0-9]+)",
+                    "Frm_Logintoken[^0-9]{0,100}([0-9]+)"
+            );
+
+            // Actual browser capture on this GM220-S showed 0.
             if (token == null || token.isEmpty()) token = "0";
 
             String passwordToSend;
             if (passwordMode == 0) {
-                passwordToSend = pass; // exact browser-observed form first
+                passwordToSend = pass;
             } else if (passwordMode == 1) {
                 passwordToSend = sha256(pass);
             } else {
@@ -164,113 +230,228 @@ public class RouterClient {
                 passwordToSend = sha256(pass + rnd);
             }
 
-            String body = "frashnum=" +
+            // Exact observed login form:
+            // frashnum=
+            // action=login
+            // Frm_Logintoken=0
+            // username=...
+            // Password=...
+            String body =
+                    "frashnum=" +
                     "&action=login" +
                     "&Frm_Logintoken=" + enc(token) +
                     "&username=" + enc(user) +
                     "&Password=" + enc(passwordToSend);
 
-            Response login = request(base + "/", "POST", body, cookie, base, false);
+            Response login = request(
+                    base + "/",
+                    "POST",
+                    body,
+                    cookie,
+                    base,
+                    base + "/",
+                    false
+            );
             cookie = login.cookie;
 
             String loginBody = login.body;
             String location = login.location;
 
-            // Follow login redirect manually so cookies are retained.
-            if (login.code >= 300 && login.code < 400 && location != null && !location.isEmpty()) {
+            if (login.code >= 300 && login.code < 400
+                    && location != null && !location.isEmpty()) {
+
                 URL target = new URL(new URL(base + "/"), location);
-                Response redirected = request(target.toString(), "GET", null, cookie, base, true);
+
+                Response redirected = request(
+                        target.toString(),
+                        "GET",
+                        null,
+                        cookie,
+                        null,
+                        null,
+                        true
+                );
+
                 cookie = redirected.cookie;
                 loginBody = redirected.body;
                 location = target.toString();
             }
 
-            // If response itself is minimal, verify with start.ghtml.
             boolean loggedIn = looksLoggedIn(loginBody, location);
+
             if (!loggedIn) {
                 try {
-                    Response start = request(base + "/start.ghtml", "GET", null, cookie, base, true);
+                    Response start = request(
+                            base + "/start.ghtml",
+                            "GET",
+                            null,
+                            cookie,
+                            null,
+                            null,
+                            true
+                    );
                     cookie = start.cookie;
                     loggedIn = looksLoggedIn(start.body, "/start.ghtml");
-                    if (loggedIn) loginBody = start.body;
                 } catch (Exception ignored) {}
             }
 
-            if (!loggedIn) {
-                return new Result(false, "Router rejected login. Exact GM220-S form was sent (frashnum/action/Frm_Logintoken/username/Password).");
-            }
+            out.cookie = cookie;
+            out.ok = loggedIn;
+            out.message = loggedIn
+                    ? "Login successful."
+                    : "Router rejected login.";
 
-            String rebootUrl = base + "/getpage.gch?pid=1002&nextpage=manager_dev_conf_t.gch";
-            Response rebootPage = request(rebootUrl, "GET", null, cookie, base, true);
-            cookie = rebootPage.cookie;
+            return out;
 
-            String session = sessionToken(rebootPage.body);
-            if (session == null) {
-                try {
-                    Response template = request(base + "/template.gch?pid=1002&nextpage=manager_dev_conf_t.gch", "GET", null, cookie, base, true);
-                    cookie = template.cookie;
-                    session = sessionToken(template.body);
-                } catch (Exception ignored) {}
-            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.message = e.getClass().getSimpleName() + ": " + e.getMessage();
+            return out;
+        }
+    }
 
-            if (session == null) {
-                // Login is now proven; this diagnostic is much more useful than saying login failed.
-                return new Result(false, "LOGIN OK, but reboot _SESSION_TOKEN was not found. Next we need the browser Network payload for the Reboot button.");
-            }
+    private static LoginSession loginWithFallbacks(String base, String user, String pass) {
+        LoginSession plain = login(base, user, pass, 0);
+        if (plain.ok) return plain;
 
-            if (!doReboot) {
-                return new Result(true, "Connection successful. Login verified and reboot token found.");
-            }
+        LoginSession sha = login(base, user, pass, 1);
+        if (sha.ok) return sha;
 
+        LoginSession legacy = login(base, user, pass, 2);
+        if (legacy.ok) return legacy;
+
+        LoginSession fail = new LoginSession();
+        fail.ok = false;
+        fail.message =
+                "Plain: " + plain.message +
+                " / SHA256: " + sha.message +
+                " / Legacy: " + legacy.message;
+        return fail;
+    }
+
+    private static class TokenResult {
+        String token;
+        String cookie;
+        String source;
+    }
+
+    private static TokenResult discoverRebootToken(String base, String cookie) {
+        TokenResult tr = new TokenResult();
+        tr.cookie = cookie;
+
+        String[] urls = new String[] {
+                base + "/template.gch?pid=1002&nextpage=manager_dev_conf_t.gch",
+                base + "/getpage.gch?pid=1002&nextpage=manager_dev_conf_t.gch",
+                base + "/top.gch",
+                base + "/start.ghtml",
+                base + "/keepAlive.gch"
+        };
+
+        for (String url : urls) {
+            try {
+                Response r = request(
+                        url,
+                        "GET",
+                        null,
+                        tr.cookie,
+                        null,
+                        null,
+                        true
+                );
+
+                tr.cookie = r.cookie;
+
+                String t = sessionToken(r.body);
+                if (t != null) {
+                    tr.token = t;
+                    tr.source = url;
+                    return tr;
+                }
+
+            } catch (Exception ignored) {}
+        }
+
+        return tr;
+    }
+
+    public static Result test(String base, String user, String pass) {
+        LoginSession ls = loginWithFallbacks(base, user, pass);
+
+        if (!ls.ok) {
+            return new Result(false, "Login failed. " + ls.message);
+        }
+
+        TokenResult tr = discoverRebootToken(ls.base, ls.cookie);
+
+        if (tr.token == null) {
+            return new Result(
+                    false,
+                    "LOGIN OK, but reboot session token still was not found in template/getpage/top/start/keepAlive pages."
+            );
+        }
+
+        return new Result(
+                true,
+                "Connection successful. Login verified and reboot token found."
+        );
+    }
+
+    public static Result reboot(String base, String user, String pass) {
+        LoginSession ls = loginWithFallbacks(base, user, pass);
+
+        if (!ls.ok) {
+            return new Result(false, "Login failed. " + ls.message);
+        }
+
+        TokenResult tr = discoverRebootToken(ls.base, ls.cookie);
+
+        if (tr.token == null) {
+            return new Result(
+                    false,
+                    "LOGIN OK, but reboot session token could not be found."
+            );
+        }
+
+        try {
+            String rebootUrl =
+                    ls.base + "/getpage.gch?pid=1002&nextpage=manager_dev_conf_t.gch";
+
+            String referer =
+                    ls.base + "/template.gch?pid=1002&nextpage=manager_dev_conf_t.gch";
+
+            // EXACT reboot payload captured from your GM220-S browser:
+            // IF_ACTION=devrestart
+            // IF_ERRORSTR=SUCC
+            // IF_ERRORPARAM=SUCC
+            // IF_ERRORTYPE=-1281035768
+            // flag=1
+            // _SESSION_TOKEN=<dynamic token>
             String rebootBody =
                     "IF_ACTION=devrestart" +
                     "&IF_ERRORSTR=SUCC" +
                     "&IF_ERRORPARAM=SUCC" +
-                    "&IF_ERRORTYPE=-1" +
+                    "&IF_ERRORTYPE=-1281035768" +
                     "&flag=1" +
-                    "&_SESSION_TOKEN=" + enc(session);
+                    "&_SESSION_TOKEN=" + enc(tr.token);
 
             try {
-                request(rebootUrl, "POST", rebootBody, cookie, base, false);
+                request(
+                        rebootUrl,
+                        "POST",
+                        rebootBody,
+                        tr.cookie,
+                        ls.base,
+                        referer,
+                        false
+                );
             } catch (Exception ignored) {
-                // Router dropping the connection is normal once reboot begins.
+                // Normal: connection can drop immediately when reboot begins.
             }
+
             return new Result(true, "Reboot command sent successfully.");
 
         } catch (Exception e) {
             return new Result(false, e.getClass().getSimpleName() + ": " + e.getMessage());
         }
-    }
-
-    public static Result test(String base, String user, String pass) {
-        Result plain = attempt(base, user, pass, false, 0);
-        if (plain.ok || plain.message.startsWith("LOGIN OK")) return plain;
-
-        Result sha = attempt(base, user, pass, false, 1);
-        if (sha.ok || sha.message.startsWith("LOGIN OK")) return sha;
-
-        Result legacy = attempt(base, user, pass, false, 2);
-        if (legacy.ok || legacy.message.startsWith("LOGIN OK")) return legacy;
-
-        return new Result(false,
-                "Plain: " + plain.message +
-                " / SHA256: " + sha.message +
-                " / Legacy SHA256(pass+random): " + legacy.message);
-    }
-
-    public static Result reboot(String base, String user, String pass) {
-        Result plain = attempt(base, user, pass, true, 0);
-        if (plain.ok || plain.message.startsWith("LOGIN OK")) return plain;
-
-        Result sha = attempt(base, user, pass, true, 1);
-        if (sha.ok || sha.message.startsWith("LOGIN OK")) return sha;
-
-        Result legacy = attempt(base, user, pass, true, 2);
-        if (legacy.ok || legacy.message.startsWith("LOGIN OK")) return legacy;
-
-        return new Result(false,
-                "Plain: " + plain.message +
-                " / SHA256: " + sha.message +
-                " / Legacy: " + legacy.message);
     }
 }
